@@ -1,7 +1,0 @@
-{
-    "sketch": "mi-lora-red-arduino.ino",
-    "output": "build",
-    "board": "arduino:avr:uno",
-    "port": "COM6",
-    "programmer": "cmsis-dap"
-}
