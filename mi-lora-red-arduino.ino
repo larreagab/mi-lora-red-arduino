@@ -8,7 +8,8 @@ void setup()
 
 void loop()
 {
-    
+    sendMessage(1, "hello world", 0, 3);
+    delay(5000);
 	
 }
 void sendATCommand(String command) {
