@@ -1,5 +1,11 @@
 #include <SoftwareSerial.h>
+#include "LowPower.h"
 SoftwareSerial LA66_serial_port(10, 11);
+
+// Función de interrupción para despertar
+void wakeUp() {
+  // No es necesario hacer nada aquí
+}
 void setup()
 {
    Serial.begin(9600); Serial.println('\n'); Serial.flush();
@@ -8,7 +14,8 @@ void setup()
 
 void loop()
 {
-    sendMessage(1, "hello world", 0, 3);
+    
+    //sendMessage(1, "hello world", 0, 0);
     delay(5000);
 	
 }
@@ -20,12 +27,13 @@ void sendATCommand(String command) {
 
 void readResponse() {
   char inChar;
-  while(true) {
-    if(LA66_serial_port.available()) {
+  
+    while(LA66_serial_port.available()) {
       inChar = (char)LA66_serial_port.read();
       Serial.print(inChar); Serial.flush();
     }
-  }
+    Serial.println();
+  
 }
 
 
