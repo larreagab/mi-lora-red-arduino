@@ -1,24 +1,127 @@
 #include <SoftwareSerial.h>
-#include "LowPower.h"
-SoftwareSerial LA66_serial_port(10, 11);
+#include <EEPROM.h>
 
-// Función de interrupción para despertar
-void wakeUp() {
-  // No es necesario hacer nada aquí
-}
-void setup()
-{
-   Serial.begin(9600); Serial.println('\n'); Serial.flush();
-  LA66_serial_port.begin(9600);
+// Definición del puerto serial para LoRa
+SoftwareSerial LA66_serial_port(10, 11); // RX, TX para LoRa
+
+// Estructura para los datos del sensor
+struct SensorDataOptimized {
+    int8_t nodeId;           // 1 byte
+    int16_t humidity;        // 2 bytes (multiplicado por 100)
+    int16_t temperature;     // 2 bytes (multiplicado por 100)
+    int16_t moistureLevel;   // 2 bytes
+    int16_t luminosity;      // 2 bytes 
+    int16_t rainLevel;       // 2 bytes
+};
+
+// Variables de estado
+bool esperandoDatos = false;
+const char encabezado[] = "DATA_START";
+const size_t encabezadoSize = sizeof(encabezado);
+
+const int eepromStartAddress = 0;  // Dirección de inicio en la EEPROM
+int currentEepromAddress = eepromStartAddress;
+
+void setup() {
+  Serial.begin(9600);    // Comunicación serial para el monitor serial y ESP32
+  LA66_serial_port.begin(9600); // Comunicación serial con LoRa
+  Serial.println('\n'); 
+  Serial.flush();
 }
 
-void loop()
-{
+void loop() {
+  static size_t encabezadoIndex = 0;
+
+  if (Serial.available()) {
+    if (!esperandoDatos) {
+      char c = Serial.read();
+      if (c == encabezado[encabezadoIndex]) {
+        encabezadoIndex++;
+        if (encabezadoIndex == encabezadoSize) {
+          esperandoDatos = true;
+          encabezadoIndex = 0;
+          Serial.println("Preparado para recibir datos.");
+        }
+      } else {
+        encabezadoIndex = 0;  // Reiniciar si no coincide
+      }
+    } else if (Serial.available() >= sizeof(SensorDataOptimized)) {
+      SensorDataOptimized data;
+      Serial.readBytes((uint8_t*)&data, sizeof(SensorDataOptimized)); // Leer los bytes y convertirlos de vuelta a la estructura
+
+      // Mostrar los datos en el monitor serial
+      Serial.print("Node ID: ");
+      Serial.print(data.nodeId);
+      Serial.print(", Humidity: ");
+      Serial.print(data.humidity / 100.0);
+      Serial.print("%, Temperature: ");
+      Serial.print(data.temperature / 100.0);
+      Serial.print("°C, Moisture Level: ");
+      Serial.print(data.moistureLevel);
+      Serial.print(", Luminosity: ");
+      Serial.print(data.luminosity);
+      Serial.print(" lux, Rain Level: ");
+      Serial.println(data.rainLevel);
+      contarEstructurasEEPROM();
+      // Guardar los datos en la EEPROM
+      guardarDatosEnEEPROM(data);
+      // Enviar los datos a través de LoRa
+      enviarDatosLoRa(data);
+
+      Serial.flush();
+
+      esperandoDatos = false;  // Resetear la bandera para esperar el próximo encabezado
+    }
+  }
+
+  // Verificar si hay datos recibidos del LoRa
+  if (LA66_serial_port.available()) {
+    String mensajeRecibido = readLoRaMessage();
+    String comando = procesarMensaje(mensajeRecibido);
     
-    //sendMessage(1, "hello world", 0, 0);
-    delay(5000);
-	
+    if (comando == "REQUESTDATA") {
+      enviarDatosGuardadosEEPROM();
+    } else {
+      Serial.println("Mensaje recibido: " + comando);
+    }
+  }
+  
+  delay(100); // Ajusta el tiempo según tus necesidades
 }
+
+void guardarDatosEnEEPROM(SensorDataOptimized data) {
+  // Calcular la dirección de fin para verificar si hay espacio suficiente
+  int endAddress = currentEepromAddress + sizeof(SensorDataOptimized);
+  Serial.println(endAddress);
+
+  // Verificar si hay espacio suficiente en la EEPROM
+  if (endAddress <= EEPROM.length()) {
+    // Escribir los datos en la EEPROM
+    for (size_t i = 0; i < sizeof(SensorDataOptimized); i++) {
+      EEPROM.write(currentEepromAddress + i, *((byte*)&data + i));
+    }
+
+    // Actualizar la dirección actual
+    currentEepromAddress = endAddress;
+
+    Serial.println("Datos guardados en la EEPROM.");
+  } else {
+    Serial.println("No hay suficiente espacio en la EEPROM para almacenar los datos.");
+  }
+}
+
+void enviarDatosLoRa(SensorDataOptimized data) {
+  if (estructuraDiferenteDeCero(data)) {  // Verificar si la estructura no está vacía
+    String contenido = String(data.nodeId) + "a" +
+                       String(data.humidity) + "a" +
+                       String(data.temperature) + "a" +
+                       String(data.moistureLevel) + "a" +
+                       String(data.luminosity) + "a" +
+                       String(data.rainLevel);
+    sendMessage(1, contenido, 0, 0);
+  }
+}
+
 void sendATCommand(String command) {
   LA66_serial_port.print(command + '\n');
   Serial.println("Sent Command: " + command); Serial.flush();
@@ -27,13 +130,78 @@ void sendATCommand(String command) {
 
 void readResponse() {
   char inChar;
-  
-    while(LA66_serial_port.available()) {
-      inChar = (char)LA66_serial_port.read();
-      Serial.print(inChar); Serial.flush();
+
+  while (LA66_serial_port.available()) {
+    inChar = (char)LA66_serial_port.read();
+    Serial.print(inChar); Serial.flush();
+  }
+  Serial.println();
+}
+
+
+
+void borrarEEPROM() {
+  // Recorrer todas las direcciones de la EEPROM
+  for (int i = 0; i < EEPROM.length(); i++) {
+    EEPROM.write(i, 0);  // Escribir 0 en cada dirección
+  }
+}
+
+bool estructuraDiferenteDeCero(SensorDataOptimized data) {
+  return data.nodeId != 0 || 
+         data.humidity != 0 || 
+         data.temperature != 0 || 
+         data.moistureLevel != 0 || 
+         data.luminosity != 0 || 
+         data.rainLevel != 0;
+}
+
+void contarEstructurasEEPROM() {
+  int contador = 0;
+  SensorDataOptimized data;
+  for (int address = eepromStartAddress; address + sizeof(SensorDataOptimized) <= EEPROM.length(); address += sizeof(SensorDataOptimized)) {
+    EEPROM.get(address, data);
+    if (estructuraDiferenteDeCero(data)) {
+      contador++;
     }
-    Serial.println();
+  }
+  Serial.print("Número de estructuras diferentes de 0 en EEPROM: ");
+  Serial.println(contador);
+}
+
+void enviarDatosGuardadosEEPROM() {
+  SensorDataOptimized data;
+  for (int address = eepromStartAddress; address + sizeof(SensorDataOptimized) <= EEPROM.length(); address += sizeof(SensorDataOptimized)) {
+    EEPROM.get(address, data);
+    if (estructuraDiferenteDeCero(data)) {  // Verificar si la estructura no está vacía
+      enviarDatosLoRa(data);
+      delay(1000);  // Pequeña pausa entre envíos
+    }
+  }
+}
+
+String readLoRaMessage() {
+  String message = "";
+  while (LA66_serial_port.available()) {
+    char c = LA66_serial_port.read();
+    message += c;
+  }
+  return message;
+}
+
+String procesarMensaje(String mensaje) {
+  int startIndex = mensaje.indexOf("Data: (String: ) ");
+  if (startIndex != -1) {
+    startIndex += 17; // Ajustar el índice para el inicio de los datos
+    int endIndex = mensaje.indexOf("Rssi=", startIndex);
+    if (endIndex == -1) endIndex = mensaje.length();
+    
+    String mensajeExtraido = mensaje.substring(startIndex, endIndex);
+    mensajeExtraido.trim(); // Eliminar espacios en blanco
+    return mensajeExtraido;
+  }
   
+  return "No se encontró mensaje.";
 }
 
 
