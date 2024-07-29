@@ -96,7 +96,9 @@ void setup() {
 
     if (rtc.lostPower()) {
         // Ajustar la fecha y hora a la compilación
-        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+        Serial.println("RTC perdió la hora, obteniendo hora de NTP");
+        timeClient.update();
+        rtc.adjust(DateTime(timeClient.getEpochTime()));
     }
 
     // Deshabilitar el pin 32K
@@ -129,11 +131,7 @@ void setup() {
     // Inicializa la conexión WiFi
     
 
-    if (rtc.lostPower()) {
-        Serial.println("RTC perdió la hora, obteniendo hora de NTP");
-        timeClient.update();
-        rtc.adjust(DateTime(timeClient.getEpochTime()));
-    }
+    
 
     
 
