@@ -74,10 +74,10 @@ void configureAlarm() {
 
 void setup() {
     Serial.begin(9600);
-    dht.begin();
-    Wire.begin(); 
-    lightMeter.begin();
-
+    
+     
+    
+    Serial.println("Hola setup");
     pinMode(rainSensorPin, INPUT);
     pinMode(alarmPin, INPUT_PULLUP); // Configurar el pin de alarma como entrada con pull-up
     pinMode(outputPin, OUTPUT); // Configurar el pin 4 como salida
@@ -93,17 +93,23 @@ void setup() {
 
     // Configurar la alarma para que se active en 30 segundos
     configureAlarm();
-
+    
     // Adjuntar la interrupción para manejar la alarma
     attachInterrupt(digitalPinToInterrupt(alarmPin), onAlarm, FALLING);
 }
 
 void loop() {
     if (alarmFlag) {
-        alarmFlag = false;
-
-        // Activar el pin 4 al despertar
         digitalWrite(outputPin, HIGH);
+        Wire.begin();
+        lightMeter.begin();
+        dht.begin();
+        
+        delay(5000);
+        alarmFlag = false;
+        
+        // Activar el pin 4 al despertar
+        
         Serial.println("Alarma activada! Realizando tareas...");
 
         mesh.update();
@@ -133,13 +139,13 @@ void loop() {
         // Crear un buffer para los datos del sensor
         byte dataBuffer[sizeof(SensorData)];
         memcpy(dataBuffer, &data, sizeof(SensorData));
-
+        delay(1000);
         // Envío de datos del sensor a través de la red mesh
         if (millis() - lastSentTime > 2000) {
             lastSentTime = millis();
             mesh.write(dataBuffer, 'M', sizeof(dataBuffer));
         }
-
+        delay(1000);
         // Muestra los datos del sensor y la fecha y hora en el monitor serial
         DateTime now = rtc.now();
         Serial.print("Nodo: ");
@@ -175,6 +181,7 @@ void loop() {
         digitalWrite(outputPin, LOW);
 
         Serial.println("Volviendo a dormir...");
+        //LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     }
 
     // Asegurarse de que no haya datos pendientes de ser enviados por Serial antes de dormir
@@ -182,7 +189,7 @@ void loop() {
 
     // Mostrar mensaje antes de dormir
     Serial.println("Durmiendo... Esperando la alarma para despertar.");
-
+    radio.powerDown();
     // Poner al Arduino en modo de bajo consumo
     LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
 
