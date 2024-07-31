@@ -50,6 +50,7 @@ struct TimeData {
 
 SensorData data;
 unsigned long lastSentTime;
+bool timeReceived = false;  // Variable para rastrear si la hora ya ha sido recibida
 
 // Función de interrupción para manejar la alarma
 void onAlarm() {
@@ -58,44 +59,113 @@ void onAlarm() {
 
 // Configurar la alarma para el próximo intervalo de 30 segundos
 void configureAlarm() {
+    rtc.clearAlarm(1);
+    rtc.clearAlarm(2);
     DateTime now = rtc.now();
-    int nextSecond = (now.second() < 30) ? 30 : 0;
-    int nextMinute = (now.second() < 30) ? now.minute() : (now.minute() + 1) % 60;
+    int nextMinute = now.minute() + 1;
+    int nextSecond = 0;
 
-    rtc.clearAlarm(1); // Limpia la alarma 1
-    rtc.clearAlarm(2); // Limpia la alarma 2 (si se ha utilizado)
-
-    if (!rtc.setAlarm1(DateTime(now.year(), now.month(), now.day(), now.hour(), nextMinute, nextSecond), DS3231_A1_Second)) {
-        Serial.println("Error, la alarma no se pudo configurar!");
+    // Programar la alarma para el siguiente minuto completo
+    if (!rtc.setAlarm1(
+            DateTime(now.year(), now.month(), now.day(), now.hour(), nextMinute, nextSecond), 
+            DS3231_A1_Minute // Este modo activa la alarma cuando los minutos coinciden
+        )) {
+        Serial.println("Error, alarm wasn't set!");
     } else {
-        Serial.println("La alarma se configuró para el próximo intervalo de 30 segundos.");
+        Serial.print("Alarma programada para: ");
+        Serial.print(now.hour());
+        Serial.print(":");
+        Serial.print(nextMinute);
+        Serial.println();
     }
 }
 
 void setup() {
     Serial.begin(9600);
-    
-     
-    
+    alarmFlag = false;
+    timeReceived=false;
     Serial.println("Hola setup");
     pinMode(rainSensorPin, INPUT);
     pinMode(alarmPin, INPUT_PULLUP); // Configurar el pin de alarma como entrada con pull-up
     pinMode(outputPin, OUTPUT); // Configurar el pin 4 como salida
+    digitalWrite(outputPin, LOW);
 
     if (!rtc.begin()) {
         Serial.println("No se encontró el RTC DS3231");
         while (1);
     }
-
+    if (rtc.lostPower()) {
+        Serial.println("RTC perdió energía, ajustando la hora...");
+        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    }
     mesh.setNodeID(0); // ID único para este nodo
     data.nodeId = 2;   // Configura el ID del nodo en la estructura
     mesh.begin();
 
+    // Borrar las alarmas anteriores
+    rtc.clearAlarm(1);
+    rtc.clearAlarm(2);
+    rtc.disable32K();
+    // Detener las señales oscilantes en el pin SQW
+    rtc.writeSqwPinMode(DS3231_OFF);
+
+    // Deshabilitar la alarma 2
+    rtc.disableAlarm(2);
+
     // Configurar la alarma para que se active en 30 segundos
-    configureAlarm();
+    //configureAlarm();
     
     // Adjuntar la interrupción para manejar la alarma
     attachInterrupt(digitalPinToInterrupt(alarmPin), onAlarm, FALLING);
+
+    // Bucle de espera hasta recibir el mensaje de la hora
+    // while (!timeReceived) {
+    //     mesh.update();
+    //     mesh.DHCP();
+        
+    //     // Verificar si hay datos disponibles para recibir
+        
+    //     while (network.available()) {
+    //         RF24NetworkHeader header;
+    //         network.peek(header);
+
+    //         if (header.type == 'T') { // 'T' indica actualización de tiempo
+    //             TimeData timeDataR;
+    //             if (network.read(header, &timeDataR, sizeof(timeDataR))) {
+    //                 // Ajusta la hora en el DS3231
+    //                 rtc.adjust(DateTime(timeDataR.year, timeDataR.month, timeDataR.day, timeDataR.hour, timeDataR.minute, timeDataR.second));
+    //                 timeReceived = true;  // Marca la hora como recibida
+    //                 Serial.println("Hora recibida y ajustada.");
+    //                 byte confirmation = 1; // Confirmación simple
+    //                 mesh.write(&confirmation, 'C', sizeof(confirmation));
+    //                 //mesh.write(&confirmation, 'C', sizeof(confirmation));
+    //                 //mesh.write(&confirmation, 'C', sizeof(confirmation));
+    //                 //mesh.write(&confirmation, 'C', sizeof(confirmation));
+    //                 //mesh.write(&confirmation, 'C', sizeof(confirmation));
+    //                 Serial.println("Confirmación de recepción de hora enviada.");
+                    
+    //             }
+    //         }
+    //     }
+    // }
+
+    
+    DateTime now = rtc.now(); // Obtener la hora actual del RTC
+  
+  // Imprimir la fecha y hora en el formato deseado
+  Serial.print(now.year(), DEC); // Año
+  Serial.print('/');
+  Serial.print(now.month(), DEC); // Mes
+  Serial.print('/');
+  Serial.print(now.day(), DEC); // Día
+  Serial.print(" ");
+  Serial.print(now.hour(), DEC); // Hora
+  Serial.print(':');
+  Serial.print(now.minute(), DEC); // Minuto
+  Serial.print(':');
+  Serial.print(now.second(), DEC); // Segundo
+  Serial.println();
+configureAlarm();
 }
 
 void loop() {
@@ -105,7 +175,7 @@ void loop() {
         lightMeter.begin();
         dht.begin();
         
-        delay(5000);
+        delay(200);
         alarmFlag = false;
         
         // Activar el pin 4 al despertar
@@ -114,20 +184,6 @@ void loop() {
 
         mesh.update();
         mesh.DHCP();
-
-        // Verificar si hay datos disponibles para recibir
-        while (network.available()) {
-            RF24NetworkHeader header;
-            network.peek(header);
-
-            if (header.type == 'T') { // 'T' indica actualización de tiempo
-                TimeData timeData;
-                if (network.read(header, &timeData, sizeof(timeData))) {
-                    // Ajusta la hora en el DS3231
-                    rtc.adjust(DateTime(timeData.year, timeData.month, timeData.day, timeData.hour, timeData.minute, timeData.second));
-                }
-            }
-        }
 
         // Lectura de los sensores
         data.humidity = dht.readHumidity();
@@ -139,13 +195,13 @@ void loop() {
         // Crear un buffer para los datos del sensor
         byte dataBuffer[sizeof(SensorData)];
         memcpy(dataBuffer, &data, sizeof(SensorData));
-        delay(1000);
+        delay(7200);
+        
         // Envío de datos del sensor a través de la red mesh
-        if (millis() - lastSentTime > 2000) {
-            lastSentTime = millis();
-            mesh.write(dataBuffer, 'M', sizeof(dataBuffer));
-        }
-        delay(1000);
+        
+        mesh.write(dataBuffer, 'M', sizeof(dataBuffer));
+        
+        
         // Muestra los datos del sensor y la fecha y hora en el monitor serial
         DateTime now = rtc.now();
         Serial.print("Nodo: ");
@@ -197,5 +253,5 @@ void loop() {
     Serial.println("Despierto!");
 
     // Esperar un momento antes de volver a dormir
-    delay(1000);
+    
 }
