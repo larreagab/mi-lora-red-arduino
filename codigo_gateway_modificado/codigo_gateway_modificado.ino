@@ -100,6 +100,7 @@ void setup() {
         Serial.println("RTC perdió la hora, obteniendo hora de NTP");
         timeClient.update();
         rtc.adjust(DateTime(timeClient.getEpochTime()));
+        preferences.putBool("horaEnviada", false);
     }
 
     
@@ -193,8 +194,7 @@ void onAlarm() {
         }
     }
 
-    // Reprogramar la alarma para el próximo intervalo
-    configurarAlarma();
+    
 }
 
 void actualizarYMostrarHora() {
@@ -271,23 +271,30 @@ void configurarAlarma() {
     rtc.clearAlarm(1);
     rtc.clearAlarm(2);
     DateTime now = rtc.now();
-    int nextMinute = now.minute() + 1;
-    int nextSecond = 0;
+    int nextMinute = (now.minute() / 30 + 1) * 30;
+    int nextHour = now.hour();
 
-    // Programar la alarma para el siguiente minuto completo
+    // Ajustar la hora si la alarma pasa a la siguiente hora
+    if (nextMinute >= 60) {
+        nextMinute = 0;
+        nextHour = (now.hour() + 1) % 24;
+    }
+
+    // Programar la alarma para el siguiente intervalo de 30 minutos
     if (!rtc.setAlarm1(
-            DateTime(now.year(), now.month(), now.day(), now.hour(), nextMinute, nextSecond), 
-            DS3231_A1_Minute // Este modo activa la alarma cuando los minutos coinciden
+            DateTime(now.year(), now.month(), now.day(), nextHour, nextMinute, 0), 
+            DS3231_A1_Minute
         )) {
         Serial.println("Error, alarm wasn't set!");
     } else {
         Serial.print("Alarma programada para: ");
-        Serial.print(now.hour());
+        Serial.print(nextHour);
         Serial.print(":");
         Serial.print(nextMinute);
         Serial.println();
     }
 }
+
 void enviarHora() {
     DateTime now = rtc.now();
     TimeData timeData = {now.year(), now.month(), now.day(), now.hour(), now.minute(), now.second()};
@@ -308,7 +315,7 @@ bool recibirConfirmacion() {
     while (network.available()) {
         RF24NetworkHeader header;
         network.peek(header);
-        Serial.println("Oyendo");
+        
         if (header.type == 'C') { 
             byte confirmationBuffer[1];
             if (network.read(header, confirmationBuffer, sizeof(confirmationBuffer))) {
