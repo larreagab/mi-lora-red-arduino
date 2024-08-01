@@ -84,13 +84,31 @@ app.post('/send-command', (req, res) => {
       if (!listening) return; // Si no estamos escuchando, no hacemos nada
 
       responseData += data.toString();
-      console.log('Received data:', data.toString());
 
       // Verifica si el mensaje contiene "DATOSENVIADOS" y detén la escucha
       if (responseData.includes('DATOSENVIADOS')) {
         listening = false; // Detén la escucha
         console.log('Stopping listening as "DATOSENVIADOS" received');
-        console.log('Response:', responseData); // Depuración
+
+        // Usa una expresión regular para extraer todas las partes que te interesan
+        const matches = responseData.match(/Data: \(String: \) ([0-9a-fA-F-]+)/g);
+        if (matches) {
+          const extractedDataArray = matches.map(match => {
+            const matchGroups = match.match(/Data: \(String: \) ([0-9a-fA-F-]+)/);
+            return matchGroups[1];
+          });
+
+          // Excluye el último dato
+          if (extractedDataArray.length > 0) {
+            extractedDataArray.pop();
+          }
+
+          console.log('Extracted Data:', extractedDataArray); // Depuración
+          console.log('Number of matches:', extractedDataArray.length); // Contar coincidencias
+        } else {
+          console.log('No matching data found');
+        }
+
         serialPort.removeListener('data', onData); // Remueve el listener
       }
     });

@@ -178,6 +178,7 @@ void enviarDatosGuardadosEEPROM() {
       delay(1000);  // Pequeña pausa entre envíos
     }
   }
+  sendMessage(1, "DATOSENVIADOS", 0, 0);
 }
 
 String readLoRaMessage() {
