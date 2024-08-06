@@ -123,7 +123,7 @@ void setup() {
     rtc.disableAlarm(2);
 
     // Programar la alarma con la hora específica y el intervalo de repetición
-    configurarAlarma();
+    configurarAlarma(1);
     bool horaEnviada = preferences.getBool("horaEnviada", false);
      if (!horaEnviada) {
         bool confirmationReceived = false;
@@ -140,6 +140,7 @@ void setup() {
         Serial.println("La hora ya ha sido enviada anteriormente.");
     }
     //preferences.putBool("horaEnviada", false);
+    radio.powerDown();
     esp_deep_sleep_start();  // Entrar en modo deep sleep
 }
 
@@ -193,7 +194,7 @@ void onAlarm() {
             }
         }
     }
-
+  radio.powerDown();
     
 }
 
@@ -267,25 +268,21 @@ void printData(SensorData data) {
     Serial.println(data.rainLevel);
 }
 
-void configurarAlarma() {
+void configurarAlarma(int interval) {
     rtc.clearAlarm(1);
     rtc.clearAlarm(2);
+
     DateTime now = rtc.now();
-    int nextMinute = (now.minute() / 30 + 1) * 30;
-    int nextHour = now.hour();
+    int totalMinutes = now.minute() + interval;
+    int nextHour = (now.hour() + totalMinutes / 60) % 24;
+    int nextMinute = totalMinutes % 60;
 
-    // Ajustar la hora si la alarma pasa a la siguiente hora
-    if (nextMinute >= 60) {
-        nextMinute = 0;
-        nextHour = (now.hour() + 1) % 24;
-    }
-
-    // Programar la alarma para el siguiente intervalo de 30 minutos
+    // Configurar la alarma para el siguiente intervalo
     if (!rtc.setAlarm1(
             DateTime(now.year(), now.month(), now.day(), nextHour, nextMinute, 0), 
             DS3231_A1_Minute
         )) {
-        Serial.println("Error, alarm wasn't set!");
+        Serial.println("Error, la alarma no se pudo configurar!");
     } else {
         Serial.print("Alarma programada para: ");
         Serial.print(nextHour);

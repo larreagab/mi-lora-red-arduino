@@ -58,20 +58,15 @@ void onAlarm() {
 }
 
 // Configurar la alarma para el próximo intervalo de 30 segundos
-void configureAlarm() {
+void configureAlarm(int intervalMinutes) {
     rtc.clearAlarm(1);
     rtc.clearAlarm(2);
     DateTime now = rtc.now();
-    int nextMinute = (now.minute() / 30 + 1) * 30;
-    int nextHour = now.hour();
+    int totalMinutes = now.minute() + intervalMinutes;
+    int nextHour = (now.hour() + totalMinutes / 60) % 24;
+    int nextMinute = totalMinutes % 60;
 
-    // Ajustar la hora si la alarma pasa a la siguiente hora
-    if (nextMinute >= 60) {
-        nextMinute = 0;
-        nextHour = (now.hour() + 1) % 24;
-    }
-
-    // Programar la alarma para el siguiente intervalo de 30 minutos
+    // Programar la alarma para el siguiente intervalo
     if (!rtc.setAlarm1(
             DateTime(now.year(), now.month(), now.day(), nextHour, nextMinute, 0), 
             DS3231_A1_Minute
@@ -172,7 +167,7 @@ void setup() {
   Serial.print(':');
   Serial.print(now.second(), DEC); // Segundo
   Serial.println();
-configureAlarm();
+configureAlarm(1);
 }
 
 void loop() {
@@ -237,7 +232,7 @@ void loop() {
         Serial.println(now.second());
 
         // Reconfigurar la alarma para el siguiente intervalo de 30 segundos
-        configureAlarm();
+        configureAlarm(1);
 
         // Esperar un momento antes de desactivar el pin
         delay(1000);
