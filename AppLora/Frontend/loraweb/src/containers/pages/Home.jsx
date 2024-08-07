@@ -26,6 +26,13 @@ const Home = () => {
         setLoading(false);
       }
     };
+
+    // Retrieve the selected port from LocalStorage
+    const storedPort = localStorage.getItem('selectedPort');
+    if (storedPort) {
+      setSelectedPort(storedPort);
+    }
+
     fetchPorts();
   }, []);
 
@@ -41,6 +48,7 @@ const Home = () => {
 
       if (response.ok) {
         setSelectedPort(portName);
+        localStorage.setItem('selectedPort', portName); // Save port to LocalStorage
         toast.success('Port selected');
       } else {
         throw new Error('Error selecting port');
