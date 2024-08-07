@@ -81,8 +81,24 @@ void loop() {
     
     if (comando == "REQUESTDATA") {
       enviarDatosGuardadosEEPROM();
-    } else {
+    } else if (comando == "BUSCANDORED") {
+      sendMessage(1, "BUSCANDO_RED_OK", 0, 0);
+      delay(200);
+      Serial.println("mensaje enviado");
+    } 
+    else if (comando == "CONEXIONEXITOSA") {
+      sendMessage(1, "CONEXIONEXITOSA", 0, 0);
+      delay(200);
+      Serial.println("mensaje enviado");
+    }
+    else if (comando == "COMENZARTRANSMISION") {
+      sendMessage(1, "COMENZAR_TRANSMISION_OK", 0, 0);
+      delay(200);
+      Serial.println("mensaje enviado");
+    }
+    else {
       Serial.println("Mensaje recibido: " + comando);
+      delay(200);
     }
   }
   
@@ -175,7 +191,7 @@ void enviarDatosGuardadosEEPROM() {
     EEPROM.get(address, data);
     if (estructuraDiferenteDeCero(data)) {  // Verificar si la estructura no está vacía
       enviarDatosLoRa(data);
-      delay(1000);  // Pequeña pausa entre envíos
+      delay(1500);  // Pequeña pausa entre envíos
     }
   }
   sendMessage(1, "DATOSENVIADOS", 0, 0);
@@ -187,23 +203,39 @@ String readLoRaMessage() {
     char c = LA66_serial_port.read();
     message += c;
   }
+  delay(3000);
   return message;
 }
 
 String procesarMensaje(String mensaje) {
+  Serial.println(mensaje);
+
+  // Buscar el índice de inicio del mensaje
   int startIndex = mensaje.indexOf("Data: (String: ) ");
   if (startIndex != -1) {
     startIndex += 17; // Ajustar el índice para el inicio de los datos
+
+    // Buscar el índice del final del mensaje
     int endIndex = mensaje.indexOf("Rssi=", startIndex);
-    if (endIndex == -1) endIndex = mensaje.length();
+    if (endIndex == -1) {
+      endIndex = mensaje.length();
+    }
     
+    // Extraer el mensaje
     String mensajeExtraido = mensaje.substring(startIndex, endIndex);
     mensajeExtraido.trim(); // Eliminar espacios en blanco
-    return mensajeExtraido;
+
+    // Verificar si el mensaje extraído no está vacío
+    if (mensajeExtraido.length() > 0) {
+      return mensajeExtraido;
+    } else {
+      return "Mensaje extraído está vacío.";
+    }
+  } else {
+    return "No se encontró el inicio del mensaje.";
   }
-  
-  return "No se encontró mensaje.";
 }
+
 
 
 void setBandwidth(int tx, int rx) {

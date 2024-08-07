@@ -2,6 +2,7 @@ const express = require('express');
 const { SerialPort } = require('serialport');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const WebSocket = require('ws');
 
 const app = express();
 const port = 3001;
@@ -13,7 +14,38 @@ app.use(cors());
 // Variable global para el puerto serial abierto
 let serialPort = null;
 
-// Ruta para listar puertos
+// Crear un servidor de WebSocket
+const wss = new WebSocket.Server({ noServer: true });
+
+wss.on('connection', (ws) => {
+  console.log('WebSocket connection established');
+  ws.on('message', (message) => {
+    console.log(`Received message => ${message}`);
+  });
+});
+
+// Función para enviar mensajes a todos los clientes conectados
+function broadcast(data) {
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify(data));
+    }
+  });
+}
+
+// Función para procesar los datos
+function procesarDatos(data) {
+  const patron = /\b([0-9]{1,3})a(-?[0-9]{1,5})a(-?[0-9]{1,5})a(-?[0-9]{1,5})a(-?[0-9]{1,5})a(-?[0-9]{1,4})\b/g;
+  let matches = data.match(patron) || [];
+  let datosSeparados = matches.map(match => match.split('a'));
+
+  let count = datosSeparados.length;
+
+  console.log(`Number of matches (excluding the last one): ${count}`);
+  return { matches: datosSeparados, count: count };
+}
+
+// Rutas para manejar puertos seriales y comandos
 app.get('/list-ports', async (req, res) => {
   try {
     const ports = await SerialPort.list();
@@ -24,7 +56,6 @@ app.get('/list-ports', async (req, res) => {
   }
 });
 
-// Ruta para seleccionar un puerto
 app.post('/select-port', async (req, res) => {
   const { portName } = req.body;
 
@@ -33,15 +64,13 @@ app.post('/select-port', async (req, res) => {
   }
 
   try {
-    // Cerrar el puerto serial si ya está abierto
     if (serialPort) {
       serialPort.close();
     }
 
-    // Abre el puerto seleccionado
     serialPort = new SerialPort({
       path: portName,
-      baudRate: 9600 // Ajusta la tasa de baudios según sea necesario
+      baudRate: 9600
     });
 
     serialPort.on('open', () => {
@@ -60,81 +89,132 @@ app.post('/select-port', async (req, res) => {
   }
 });
 
-// Ruta para enviar comandos
-app.post('/send-command', (req, res) => {
-  const { command } = req.body;
-
-  if (!command) {
-    return res.status(400).send('Command is required');
-  }
+app.post('/send-commands', (req, res) => {
+  const commands = [
+    'AT+SEND=1,BUSCANDO_RED,1,0',
+    'AT+SEND=1,CONEXION_EXITOSA,1,0',
+    'AT+SEND=1,COMENZAR_TRANSMISION,1,0',
+    'AT+SEND=1,REQUESTDATA,1,0'
+  ];
 
   if (!serialPort || !serialPort.isOpen) {
     return res.status(400).send('Port is not open');
   }
 
-  console.log(`Sending command: ${command}`); // Depuración
+  console.log('Starting command sequence...');
 
-  try {
-    // Variable para acumular los datos recibidos
-    let responseData = '';
-    let listening = true; // Variable para controlar la escucha
+  let currentCommandIndex = 0;
+  let responseData = '';
+  let listening = true;
 
-    // Configura el puerto serial para leer los datos recibidos
-    serialPort.on('data', function onData(data) {
-      if (!listening) return; // Si no estamos escuchando, no hacemos nada
+  const onData = (data) => {
+    if (!listening) return;
 
-      responseData += data.toString();
+    responseData += data.toString();
 
-      // Verifica si el mensaje contiene "DATOSENVIADOS" y detén la escucha
-      if (responseData.includes('DATOSENVIADOS')) {
-        listening = false; // Detén la escucha
-        console.log('Stopping listening as "DATOSENVIADOS" received');
+    if (responseData.includes('BUSCANDOREDOK') && currentCommandIndex === 0) {
+      listening = false;
+      console.log('Received "BUSCANDO_RED_OK"');
+      serialPort.removeListener('data', onData);
 
-        // Usa una expresión regular para extraer todas las partes que te interesan
-        const matches = responseData.match(/Data: \(String: \) ([0-9a-fA-F-]+)/g);
-        if (matches) {
-          const extractedDataArray = matches.map(match => {
-            const matchGroups = match.match(/Data: \(String: \) ([0-9a-fA-F-]+)/);
-            return matchGroups[1];
-          });
-
-          // Excluye el último dato
-          if (extractedDataArray.length > 0) {
-            extractedDataArray.pop();
-          }
-
-          console.log('Extracted Data:', extractedDataArray); // Depuración
-          console.log('Number of matches:', extractedDataArray.length); // Contar coincidencias
-        } else {
-          console.log('No matching data found');
-        }
-
-        serialPort.removeListener('data', onData); // Remueve el listener
+      broadcast({ status: 'BUSCANDO_RED_OK', currentCommandIndex });
+      
+      // Send next command
+      currentCommandIndex++;
+      if (currentCommandIndex < commands.length) {
+        sendCommand(commands[currentCommandIndex], true);
+      } else {
+        broadcast({ status: 'COMPLETED' });
       }
-    });
+    } else if (responseData.includes('CONEXIONEXITOSA') && currentCommandIndex === 1) {
+      listening = false;
+      console.log('Received "CONEXION_EXITOSA"');
+      serialPort.removeListener('data', onData);
 
-    // Envía el comando al puerto serial con terminador de línea
+      broadcast({ status: 'CONEXION_EXITOSA', currentCommandIndex });
+      
+      // Send next command
+      currentCommandIndex++;
+      if (currentCommandIndex < commands.length) {
+        sendCommand(commands[currentCommandIndex], true);
+      } else {
+        broadcast({ status: 'COMPLETED' });
+      }
+    } else if (responseData.includes('COMENZARTRANSMISIONOK') && currentCommandIndex === 2) {
+      listening = false;
+      console.log('Received "COMENZAR_TRANSMISION_OK"');
+      serialPort.removeListener('data', onData);
+
+      broadcast({ status: 'COMENZAR_TRANSMISION_OK', currentCommandIndex });
+      
+      // Send next command
+      currentCommandIndex++;
+      if (currentCommandIndex < commands.length) {
+        sendCommand(commands[currentCommandIndex], true);
+      } else {
+        broadcast({ status: 'COMPLETED' });
+      }
+    } else if (responseData.includes('DATOSENVIADOS') && currentCommandIndex === 3) {
+      listening = false;
+      console.log('Stopping listening as "DATOSENVIADOS" received');
+      console.log('Response:', responseData);
+      serialPort.removeListener('data', onData);
+
+      const datosProcesados = procesarDatos(responseData);
+      console.log('Datos procesados:', datosProcesados);
+
+      // Enviar datos al frontend a través de WebSocket
+      broadcast({ 
+        status: 'DATOSENVIADOS',
+        datosProcesados,
+        currentCommandIndex 
+      });
+
+      // Enviar el estado final de completado
+      broadcast({ status: 'COMPLETED' });
+    }
+  };
+
+  const sendCommand = (command, waitForResponse = false) => {
+    console.log(`Sending command: ${command}`);
+    listening = waitForResponse;
+    if (waitForResponse) {
+      serialPort.on('data', onData);
+    }
     serialPort.write(`${command}\n`, (err) => {
       if (err) {
         console.error('Error sending command:', err);
-        res.status(500).send('Error sending command');
+        broadcast({ status: 'ERROR', error: err.message });
       } else {
-        res.send('Command sent successfully');
+        console.log('Command sent successfully');
+        broadcast({ status: 'COMMAND_SENT', command, currentCommandIndex });
+
+        if (!waitForResponse) {
+          // Send next command if available
+          currentCommandIndex++;
+          if (currentCommandIndex < commands.length) {
+            sendCommand(commands[currentCommandIndex], currentCommandIndex === 1 || currentCommandIndex === 3);
+          } else {
+            broadcast({ status: 'COMPLETED' });
+          }
+        }
       }
     });
+  };
 
-  } catch (error) {
-    console.error('Error:', error);
-    res.status(500).send('Error sending command');
-  }
+  // Start sending the first command
+  sendCommand(commands[currentCommandIndex], true);
+
+  res.send('Command sequence started');
 });
 
-// Ruta de ejemplo
-app.get('/', (req, res) => {
-  res.send('Hello World!');
-});
-
-// Inicia el servidor
-app.listen(port, () => {
+// Crear un servidor HTTP y agregar soporte para WebSocket
+const server = app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}/`);
+});
+
+server.on('upgrade', (request, socket, head) => {
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    wss.emit('connection', ws, request);
+  });
 });
