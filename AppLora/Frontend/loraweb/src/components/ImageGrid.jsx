@@ -1,47 +1,36 @@
-import React, { useState, useEffect } from 'react';
-import useWebSocket from 'react-use-websocket';
+import React, { useState, useEffect, useCallback } from 'react';
 import { RotatingLines } from 'react-loader-spinner';
 import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/solid";
+import { Button } from "@material-tailwind/react";
 
-const ImageGrid = ({ processStarted }) => {
+const ImageGrid = ({ processStarted, lastMessage }) => {
   const images = [
     { src: '/buscador.png', caption: 'Buscando Red' },
     { src: '/antena.png', caption: 'Conexion Exitosa' },
     { src: '/tocar.png', caption: 'Comenzar Transmision' },
     { src: '/exito.png', caption: 'Transmision Completa' },
   ];
+
   const [loadingStates, setLoadingStates] = useState([false, false, false, false]);
   const [processStates, setProcessStates] = useState([null, null, null, null]);
   const [processedData, setProcessedData] = useState(null);
 
-  const { sendMessage, lastMessage, readyState } = useWebSocket('ws://localhost:3001', {
-    onOpen: () => console.log('WebSocket connection opened'),
-    onClose: () => console.log('WebSocket connection closed'),
-    onError: (event) => console.error('WebSocket error:', event),
-    onMessage: (message) => {
-      const data = JSON.parse(message.data);
+  useEffect(() => {
+    if (lastMessage) {
+      const data = JSON.parse(lastMessage.data);
       if (data) {
-        const { status, currentCommandIndex, datosProcesados } = data;
+        const { status, datosProcesados, currentCommandIndex } = data;
+
         console.log("index: ", currentCommandIndex);
         console.log("Status: ", status);
-        if (status === 'COMMAND_SENT') {
-          const newLoadingStates = [...loadingStates];
-          newLoadingStates[currentCommandIndex] = true;
-          setLoadingStates(newLoadingStates);
-        } else if (status === 'BUSCANDO_RED_OK' || status === 'CONEXION_EXITOSA' || status === 'COMENZAR_TRANSMISION_OK' || status === 'DATOSENVIADOS') {
-          const newLoadingStates = [...loadingStates];
-          const newProcessStates = [...processStates];
-          newLoadingStates[currentCommandIndex] = false;
-          newProcessStates[currentCommandIndex] = 'success';
-          setLoadingStates(newLoadingStates);
-          setProcessStates(newProcessStates);
-        } else if (status === 'ERROR') {
-          const newLoadingStates = [...loadingStates];
-          const newProcessStates = [...processStates];
-          newLoadingStates[currentCommandIndex] = false;
-          newProcessStates[currentCommandIndex] = 'error';
-          setLoadingStates(newLoadingStates);
-          setProcessStates(newProcessStates);
+
+        const updateStates = (index, status) => {
+          setLoadingStates(prev => prev.map((state, i) => i === index ? (status === 'COMMAND_SENT') : false));
+          setProcessStates(prev => prev.map((state, i) => i === index ? (status === 'COMMAND_SENT' ? null : status === 'ERROR' ? 'error' : 'success') : state));
+        };
+
+        if (status === 'COMMAND_SENT' || status === 'BUSCANDOREDOK' || status === 'CONEXIONEXITOSA' || status === 'COMENZARTRANSMISIONOK' || status === 'DATOSENVIADOS' || status === 'ERROR') {
+          updateStates(currentCommandIndex, status);
         } else if (status === 'COMPLETED') {
           // Finalizar proceso si es necesario
         }
@@ -51,9 +40,8 @@ const ImageGrid = ({ processStarted }) => {
           setProcessedData(datosProcesados);
         }
       }
-    },
-    shouldReconnect: () => false,
-  }, processStarted);
+    }
+  }, [lastMessage]);
 
   useEffect(() => {
     if (processStarted) {
@@ -62,8 +50,7 @@ const ImageGrid = ({ processStarted }) => {
     }
   }, [processStarted]);
 
-  // Function to download processed data as a .txt file
-  const downloadProcessedData = () => {
+  const downloadProcessedData = useCallback(() => {
     if (processedData) {
       const blob = new Blob([JSON.stringify(processedData, null, 2)], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
@@ -72,8 +59,13 @@ const ImageGrid = ({ processStarted }) => {
       a.download = 'datos_procesados.txt';
       a.click();
       URL.revokeObjectURL(url);
+
+      // Reset states after downloading
+      setLoadingStates([false, false, false, false]);
+      setProcessStates([null, null, null, null]);
+      setProcessedData(null);
     }
-  };
+  }, [processedData]);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -95,15 +87,11 @@ const ImageGrid = ({ processStarted }) => {
         ))}
       </div>
 
-      {/* Button to download the processed data */}
       {processedData && (
-        <div className="mt-4">
-          <button
-            onClick={downloadProcessedData}
-            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-          >
+        <div className="mt-8 flex justify-center">
+          <Button onClick={downloadProcessedData} className="bg-[#21C0A5]">
             Descargar Datos Procesados
-          </button>
+          </Button>
         </div>
       )}
     </div>

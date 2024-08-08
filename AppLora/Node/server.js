@@ -22,6 +22,9 @@ wss.on('connection', (ws) => {
   ws.on('message', (message) => {
     console.log(`Received message => ${message}`);
   });
+  ws.on('close', () => {
+    console.log('WebSocket connection closed');
+  });
 });
 
 // Función para enviar mensajes a todos los clientes conectados
@@ -39,10 +42,8 @@ function procesarDatos(data) {
   let matches = data.match(patron) || [];
   let datosSeparados = matches.map(match => match.split('a'));
 
-  let count = datosSeparados.length;
-
-  console.log(`Number of matches (excluding the last one): ${count}`);
-  return { matches: datosSeparados, count: count };
+  console.log(`Number of matches: ${datosSeparados.length}`);
+  return { matches: datosSeparados, count: datosSeparados.length };
 }
 
 // Rutas para manejar puertos seriales y comandos
@@ -63,11 +64,24 @@ app.post('/select-port', async (req, res) => {
     return res.status(400).send('Port name is required');
   }
 
-  try {
-    if (serialPort) {
-      serialPort.close();
-    }
+  // Cerrar el puerto existente si está abierto
+  if (serialPort && serialPort.isOpen) {
+    console.log(`Closing port ${serialPort.path}...`);
+    serialPort.close((err) => {
+      if (err) {
+        console.error('Error closing port:', err);
+      } else {
+        //console.log(`Port ${serialPort.path} closed successfully`);
+      }
+      openPort(portName, res);  // Abrir el nuevo puerto después de cerrar el anterior
+    });
+  } else {
+    openPort(portName, res);  // Abrir el nuevo puerto si no hay puerto abierto
+  }
+});
 
+const openPort = (portName, res) => {
+  try {
     serialPort = new SerialPort({
       path: portName,
       baudRate: 9600
@@ -76,6 +90,12 @@ app.post('/select-port', async (req, res) => {
     serialPort.on('open', () => {
       console.log(`Port ${portName} opened successfully`);
       res.send(`Port ${portName} opened successfully`);
+    });
+
+    serialPort.on('close', () => {
+      console.log(`Port ${portName} closed`);
+      serialPort = null;
+      broadcast({ status: 'PORT_CLOSED' });
     });
 
     serialPort.on('error', (error) => {
@@ -87,7 +107,7 @@ app.post('/select-port', async (req, res) => {
     console.error('Error:', error);
     res.status(500).send('Error handling port');
   }
-});
+};
 
 app.post('/send-commands', (req, res) => {
   const commands = [
@@ -111,67 +131,32 @@ app.post('/send-commands', (req, res) => {
     if (!listening) return;
 
     responseData += data.toString();
+    const commandResponseMap = {
+      0: 'BUSCANDOREDOK',
+      1: 'CONEXIONEXITOSA',
+      2: 'COMENZARTRANSMISIONOK',
+      3: 'DATOSENVIADOS'
+    };
 
-    if (responseData.includes('BUSCANDOREDOK') && currentCommandIndex === 0) {
+    const responseType = commandResponseMap[currentCommandIndex];
+    if (responseData.includes(responseType)) {
+      console.log(`Received "${responseType}"`);
       listening = false;
-      console.log('Received "BUSCANDO_RED_OK"');
       serialPort.removeListener('data', onData);
-
-      broadcast({ status: 'BUSCANDO_RED_OK', currentCommandIndex });
       
+      broadcast({ status: responseType, currentCommandIndex });
+
+      if (currentCommandIndex === 3) {
+        const datosProcesados = procesarDatos(responseData);
+        broadcast({ status: 'DATOSENVIADOS', datosProcesados, currentCommandIndex });
+        console.log('Processed data:', datosProcesados);
+        broadcast({ status: 'COMPLETED' });
+        return;
+      }
+
       // Send next command
       currentCommandIndex++;
-      if (currentCommandIndex < commands.length) {
-        sendCommand(commands[currentCommandIndex], true);
-      } else {
-        broadcast({ status: 'COMPLETED' });
-      }
-    } else if (responseData.includes('CONEXIONEXITOSA') && currentCommandIndex === 1) {
-      listening = false;
-      console.log('Received "CONEXION_EXITOSA"');
-      serialPort.removeListener('data', onData);
-
-      broadcast({ status: 'CONEXION_EXITOSA', currentCommandIndex });
-      
-      // Send next command
-      currentCommandIndex++;
-      if (currentCommandIndex < commands.length) {
-        sendCommand(commands[currentCommandIndex], true);
-      } else {
-        broadcast({ status: 'COMPLETED' });
-      }
-    } else if (responseData.includes('COMENZARTRANSMISIONOK') && currentCommandIndex === 2) {
-      listening = false;
-      console.log('Received "COMENZAR_TRANSMISION_OK"');
-      serialPort.removeListener('data', onData);
-
-      broadcast({ status: 'COMENZAR_TRANSMISION_OK', currentCommandIndex });
-      
-      // Send next command
-      currentCommandIndex++;
-      if (currentCommandIndex < commands.length) {
-        sendCommand(commands[currentCommandIndex], true);
-      } else {
-        broadcast({ status: 'COMPLETED' });
-      }
-    } else if (responseData.includes('DATOSENVIADOS') && currentCommandIndex === 3) {
-      listening = false;
-      console.log('Stopping listening as "DATOSENVIADOS" received');
-      console.log('Response:', responseData);
-      serialPort.removeListener('data', onData);
-
-      const datosProcesados = procesarDatos(responseData);
-      console.log('Datos procesados:', datosProcesados);
-
-      // Enviar datos al frontend a través de WebSocket
-      broadcast({ 
-        status: 'DATOSENVIADOS',
-        datosProcesados,
-        currentCommandIndex 
-      });
-
-      // Enviar el estado final de completado
-      broadcast({ status: 'COMPLETED' });
+      sendCommand(commands[currentCommandIndex], true);
     }
   };
 
