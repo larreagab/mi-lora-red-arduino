@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button } from "@material-tailwind/react";
 import ImageGrid from "../../components/ImageGrid";
 import { toast } from 'react-toastify';
+import ReconnectingWebSocket from 'reconnecting-websocket';
 
 const Home = () => {
   const [ports, setPorts] = useState([]);
@@ -12,42 +13,61 @@ const Home = () => {
   const [lastMessage, setLastMessage] = useState(null);
   const ws = useRef(null);
 
+  // Función para realizar peticiones fetch
+  const fetchData = async (url) => {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Failed to fetch ${url}`);
+      return await response.json();
+    } catch (err) {
+      setError(err.message);
+      return null;
+    }
+  };
+
   useEffect(() => {
-    const fetchPorts = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('http://localhost:3001/list-ports');
-        if (!response.ok) {
-          throw new Error('Failed to fetch ports');
+    const initialize = async () => {
+      setLoading(true);
+      
+      const portsList = await fetchData('http://localhost:3001/list-ports');
+      if (portsList) setPorts(portsList);
+
+      const selectedPortFromBackend = await fetchData('http://localhost:3001/selected-port');
+      if (selectedPortFromBackend) {
+        const { portName: selectedPortFromBackendName } = selectedPortFromBackend;
+        const portExists = portsList?.some(port => port.path === selectedPortFromBackendName);
+        if (portExists) {
+          setSelectedPort(selectedPortFromBackendName);
+          localStorage.setItem('selectedPort', selectedPortFromBackendName);
+          toast.info(`Port ${selectedPortFromBackendName} is available and selected`);
+        } else {
+          localStorage.removeItem('selectedPort');
+          toast.warn('Stored port is no longer available');
         }
-        const portsList = await response.json();
-        setPorts(portsList);
-        setLoading(false);
-      } catch (err) {
-        setError(err.message);
-        setLoading(false);
       }
+      
+      setLoading(false);
     };
 
-    // Retrieve the selected port from LocalStorage
-    const storedPort = localStorage.getItem('selectedPort');
-    if (storedPort) {
-      setSelectedPort(storedPort);
-    }
+    initialize();
 
-    fetchPorts();
-
-    // Initialize WebSocket
-    ws.current = new WebSocket('ws://localhost:3001');
+    // Inicializa el WebSocket
+    ws.current = new ReconnectingWebSocket('ws://localhost:3001');
     ws.current.onopen = () => console.log('WebSocket connection opened');
     ws.current.onclose = () => console.log('WebSocket connection closed');
     ws.current.onerror = (event) => console.error('WebSocket error:', event);
-    ws.current.onmessage = (message) => setLastMessage(message);
+    ws.current.onmessage = (message) => {
+      const data = JSON.parse(message.data);
+      setLastMessage(message);
+      if (data.status === 'PORT_SELECTED') {
+        setSelectedPort(data.portName);
+        localStorage.setItem('selectedPort', data.portName);
+        toast.success(`Port ${data.portName} selected`);
+      }
+    };
 
     return () => {
-      if (ws.current) {
-        ws.current.close();
-      }
+      if (ws.current) ws.current.close();
     };
   }, []);
 
@@ -55,60 +75,75 @@ const Home = () => {
     try {
       const response = await fetch('http://localhost:3001/select-port', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ portName }),
       });
 
       if (response.ok) {
-        setSelectedPort(portName);
-        localStorage.setItem('selectedPort', portName); // Save port to LocalStorage
-        toast.success('Port selected');
+        //toast.success('Port selected');
       } else {
-        throw new Error('Error selecting port');
+        const errorMessage = await response.text();
+        throw new Error(errorMessage);
       }
     } catch (err) {
       toast.error(err.message);
+      localStorage.removeItem('selectedPort');
     }
   };
 
-  const startProcess = () => {
-    if (!selectedPort) {
-      toast.warn('No port selected');
+  const startProcess = async () => {
+  
+    // Verifica si hay un puerto seleccionado en el backend
+    const selectedPortFromBackend = await fetchData('http://localhost:3001/selected-port');
+    if (selectedPortFromBackend) {
+      const { portName: selectedPortFromBackendName } = selectedPortFromBackend;
+  
+      if (selectedPortFromBackendName !== selectedPort) {
+        toast.warn(`El puerto seleccionado en el frontend no coincide con el puerto en el backend (${selectedPortFromBackendName}).`);
+        return;
+      }
+    } else {
+      toast.error('No se pudo verificar el puerto seleccionado en el backend.');
       return;
     }
-
+  
     setLoading(true);
     fetch('http://localhost:3001/send-commands', { method: 'POST' })
       .then(() => {
         setLoading(false);
-        toast.success('Command sent and process started');
+        toast.success('Comando enviado y proceso iniciado');
         setProcessStarted(true);
       })
       .catch(() => {
         setLoading(false);
-        toast.error('Error starting process');
+        toast.error('Error al iniciar el proceso');
       });
   };
+  
 
   const refreshPorts = async () => {
     setError('');
     setPorts([]);
     setLoading(true);
-    try {
-      const response = await fetch('http://localhost:3001/list-ports');
-      if (!response.ok) {
-        throw new Error('Failed to fetch ports');
-      }
-      const portsList = await response.json();
+  
+    const portsList = await fetchData('http://localhost:3001/list-ports');
+    
+    if (portsList) {
       setPorts(portsList);
-      setLoading(false);
-    } catch (err) {
-      setError(err.message);
-      setLoading(false);
+      const portExists = portsList.some(port => port.path === selectedPort);
+  
+      if (!portExists) {
+        toast.warn('El puerto seleccionado ya no está disponible.');
+        setSelectedPort('');
+        localStorage.removeItem('selectedPort');
+      } else {
+        toast.info('El puerto seleccionado sigue disponible.');
+      }
     }
+  
+    setLoading(false);
   };
+  
 
   return (
     <div>
@@ -123,28 +158,26 @@ const Home = () => {
       ) : error ? (
         <p>Error: {error}</p>
       ) : (
-        <>
-          <div className="flex items-center">
-            <select
-              className="border rounded p-2 mr-4"
-              value={selectedPort}
-              onChange={(e) => selectPort(e.target.value)}
-            >
-              <option value="" disabled>Seleccione un puerto</option>
-              {ports.map((port, index) => (
-                <option key={index} value={port.path}>
-                  {port.path} - {port.manufacturer}
-                </option>
-              ))}
-            </select>
-            <Button
-              className="bg-blue-500 hover:bg-blue-700 text-white"
-              onClick={refreshPorts}
-            >
-              Actualizar Puertos
-            </Button>
-          </div>
-        </>
+        <div className="flex items-center">
+          <select
+            className="border rounded p-2 mr-4"
+            value={selectedPort}
+            onChange={(e) => selectPort(e.target.value)}
+          >
+            <option value="" disabled>Seleccione un puerto</option>
+            {ports.map((port, index) => (
+              <option key={index} value={port.path}>
+                {port.path} - {port.manufacturer}
+              </option>
+            ))}
+          </select>
+          <Button
+            className="bg-blue-500 hover:bg-blue-700 text-white"
+            onClick={refreshPorts}
+          >
+            Actualizar Puertos
+          </Button>
+        </div>
       )}
 
       <Button
@@ -159,6 +192,6 @@ const Home = () => {
       <ImageGrid processStarted={processStarted} lastMessage={lastMessage} />
     </div>
   );
-}
+};
 
 export default Home;

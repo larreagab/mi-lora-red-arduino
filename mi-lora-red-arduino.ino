@@ -31,7 +31,7 @@ void setup() {
 
 void loop() {
   static size_t encabezadoIndex = 0;
-
+  //borrarEEPROM();
   if (Serial.available()) {
     if (!esperandoDatos) {
       char c = Serial.read();

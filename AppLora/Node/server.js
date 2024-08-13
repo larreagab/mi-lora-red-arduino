@@ -64,21 +64,33 @@ app.post('/select-port', async (req, res) => {
     return res.status(400).send('Port name is required');
   }
 
-  // Cerrar el puerto existente si está abierto
-  if (serialPort && serialPort.isOpen) {
-    console.log(`Closing port ${serialPort.path}...`);
-    serialPort.close((err) => {
-      if (err) {
-        console.error('Error closing port:', err);
-      } else {
-        //console.log(`Port ${serialPort.path} closed successfully`);
-      }
-      openPort(portName, res);  // Abrir el nuevo puerto después de cerrar el anterior
-    });
-  } else {
-    openPort(portName, res);  // Abrir el nuevo puerto si no hay puerto abierto
+  try {
+    // Verificar si el puerto está disponible
+    const availablePorts = await SerialPort.list();
+    const portExists = availablePorts.some(port => port.path === portName);
+
+    if (!portExists) {
+      return res.status(400).send('Port is not available');
+    }
+
+    // Cerrar el puerto existente si está abierto
+    if (serialPort && serialPort.isOpen) {
+      console.log(`Closing port ${serialPort.path}...`);
+      serialPort.close((err) => {
+        if (err) {
+          console.error('Error closing port:', err);
+        }
+        openPort(portName, res);
+      });
+    } else {
+      openPort(portName, res);
+    }
+  } catch (error) {
+    console.error('Error handling port:', error);
+    res.status(500).send('Error handling port');
   }
 });
+
 
 const openPort = (portName, res) => {
   try {
@@ -90,6 +102,9 @@ const openPort = (portName, res) => {
     serialPort.on('open', () => {
       console.log(`Port ${portName} opened successfully`);
       res.send(`Port ${portName} opened successfully`);
+      
+      // Emitir mensaje WebSocket con el puerto seleccionado
+      broadcast({ status: 'PORT_SELECTED', portName });
     });
 
     serialPort.on('close', () => {
@@ -191,6 +206,14 @@ app.post('/send-commands', (req, res) => {
   sendCommand(commands[currentCommandIndex], true);
 
   res.send('Command sequence started');
+});
+
+app.get('/selected-port', (req, res) => {
+  if (serialPort) {
+    res.json({ portName: serialPort.path });
+  } else {
+    res.json({ portName: null });
+  }
 });
 
 // Crear un servidor HTTP y agregar soporte para WebSocket
