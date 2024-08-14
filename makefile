@@ -1,6 +1,6 @@
 # Directorios
-NODE_DIR=AppLora\Node
-FRONTEND_DIR=AppLora\Frontend\loraweb
+NODE_DIR=AppLora/Node
+FRONTEND_DIR=AppLora/Frontend/loraweb
 
 
 
