@@ -185,10 +185,13 @@ void onAlarm() {
 
                 // Mostrar los datos en el monitor serial
                 printData(data);
-
+                 byte confirmation = 1;
+                mesh.write(&confirmation, 'C', sizeof(confirmation));
+                Serial.println("Confirmación de recepción enviada al nodo.");
                 // Procesar y enviar los datos optimizados al Arduino UNO
                 SensorDataOptimized optimizedData = procesarDatos(data);
                 enviarDatosSensores(optimizedData);
+                
             } else {
                 Serial.println("Error en la recepción de datos");
             }

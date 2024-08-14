@@ -1,11 +1,11 @@
 #include <SPI.h>
-#include <RF24.h>
-#include <RF24Network.h>
-#include <RF24Mesh.h>
-#include <DHT.h>
-#include <RTClib.h>
+#include <RF24.h> //de TMRH20
+#include <RF24Network.h> //de TMRH20
+#include <RF24Mesh.h> //de TMRH20
+#include <DHT.h> //Adafruit
+#include <RTClib.h> //Adafruit
 #include <BH1750.h>
-#include <LowPower.h>
+#include <LowPower.h> //https://github.com/rocketscream/Low-Power
 
 // Configuración del NRF24L01
 RF24 radio(9, 10); // CE, CSN pins
@@ -51,6 +51,7 @@ struct TimeData {
 SensorData data;
 unsigned long lastSentTime;
 bool timeReceived = false;  // Variable para rastrear si la hora ya ha sido recibida
+bool confirmationReceived = false;  // Variable para rastrear la confirmación de recepción
 
 // Función de interrupción para manejar la alarma
 void onAlarm() {
@@ -81,11 +82,38 @@ void configureAlarm(int intervalMinutes) {
     }
 }
 
+// Función para enviar los datos de los sensores
+void enviarDatosSensores() {
+    byte dataBuffer[sizeof(SensorData)];
+    memcpy(dataBuffer, &data, sizeof(SensorData));
+    mesh.write(dataBuffer, 'M', sizeof(dataBuffer));
+}
+
+// Función para recibir la confirmación
+bool recibirConfirmacion() {
+    mesh.update();
+    mesh.DHCP();
+    RF24NetworkHeader header;
+    char confirmacion;
+
+    while (network.available()) {
+        network.peek(header);
+        if (header.type == 'C') {  // 'C' indica confirmación de recepción
+            network.read(header, &confirmacion, sizeof(confirmacion));
+            if (confirmacion == 1) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 void setup() {
     Serial.begin(9600);
     alarmFlag = false;
-    timeReceived=false;
+    timeReceived = false;
+    confirmationReceived = false;
+
     Serial.println("Inicializando dispositivo");
     pinMode(rainSensorPin, INPUT);
     pinMode(alarmPin, INPUT_PULLUP); // Configurar el pin de alarma como entrada con pull-up
@@ -108,15 +136,9 @@ void setup() {
     rtc.clearAlarm(1);
     rtc.clearAlarm(2);
     rtc.disable32K();
-    // Detener las señales oscilantes en el pin SQW
-    rtc.writeSqwPinMode(DS3231_OFF);
+    rtc.writeSqwPinMode(DS3231_OFF); // Detener las señales oscilantes en el pin SQW
+    rtc.disableAlarm(2); // Deshabilitar la alarma 2
 
-    // Deshabilitar la alarma 2
-    rtc.disableAlarm(2);
-
-    // Configurar la alarma para que se active en 30 segundos
-    //configureAlarm();
-    
     // Adjuntar la interrupción para manejar la alarma
     attachInterrupt(digitalPinToInterrupt(alarmPin), onAlarm, FALLING);
 
@@ -125,8 +147,6 @@ void setup() {
         mesh.update();
         mesh.DHCP();
         
-        // Verificar si hay datos disponibles para recibir
-        
         while (network.available()) {
             RF24NetworkHeader header;
             network.peek(header);
@@ -134,40 +154,32 @@ void setup() {
             if (header.type == 'T') { // 'T' indica actualización de tiempo
                 TimeData timeDataR;
                 if (network.read(header, &timeDataR, sizeof(timeDataR))) {
-                    // Ajusta la hora en el DS3231
                     rtc.adjust(DateTime(timeDataR.year, timeDataR.month, timeDataR.day, timeDataR.hour, timeDataR.minute, timeDataR.second));
-                    timeReceived = true;  // Marca la hora como recibida
+                    timeReceived = true;
                     Serial.println("Hora recibida y ajustada.");
-                    byte confirmation = 1; // Confirmación simple
+                    byte confirmation = 1;
                     mesh.write(&confirmation, 'C', sizeof(confirmation));
-                    //mesh.write(&confirmation, 'C', sizeof(confirmation));
-                    //mesh.write(&confirmation, 'C', sizeof(confirmation));
-                    //mesh.write(&confirmation, 'C', sizeof(confirmation));
-                    //mesh.write(&confirmation, 'C', sizeof(confirmation));
                     Serial.println("Confirmación de recepción de hora enviada.");
-                    
                 }
             }
         }
     }
 
-    
     DateTime now = rtc.now(); // Obtener la hora actual del RTC
-  
-  // Imprimir la fecha y hora en el formato deseado
-  Serial.print(now.year(), DEC); // Año
-  Serial.print('/');
-  Serial.print(now.month(), DEC); // Mes
-  Serial.print('/');
-  Serial.print(now.day(), DEC); // Día
-  Serial.print(" ");
-  Serial.print(now.hour(), DEC); // Hora
-  Serial.print(':');
-  Serial.print(now.minute(), DEC); // Minuto
-  Serial.print(':');
-  Serial.print(now.second(), DEC); // Segundo
-  Serial.println();
-configureAlarm(1);
+    Serial.print(now.year(), DEC); // Año
+    Serial.print('/');
+    Serial.print(now.month(), DEC); // Mes
+    Serial.print('/');
+    Serial.print(now.day(), DEC); // Día
+    Serial.print(" ");
+    Serial.print(now.hour(), DEC); // Hora
+    Serial.print(':');
+    Serial.print(now.minute(), DEC); // Minuto
+    Serial.print(':');
+    Serial.print(now.second(), DEC); // Segundo
+    Serial.println();
+
+    configureAlarm(1);
 }
 
 void loop() {
@@ -179,8 +191,6 @@ void loop() {
         
         delay(200);
         alarmFlag = false;
-        
-        // Activar el pin 4 al despertar
         
         Serial.println("Alarma activada! Realizando tareas...");
 
@@ -194,17 +204,14 @@ void loop() {
         data.luminosity = lightMeter.readLightLevel();
         data.rainLevel = analogRead(rainSensorPin);
 
-        // Crear un buffer para los datos del sensor
-        byte dataBuffer[sizeof(SensorData)];
-        memcpy(dataBuffer, &data, sizeof(SensorData));
-        delay(7600);
+        // Enviar datos de sensores con confirmación
+        while (!confirmationReceived) {
+            enviarDatosSensores();  // Esperar un momento antes de reintentar
+            confirmationReceived = recibirConfirmacion();
+            delay(240);
+        }
+        confirmationReceived = false;  // Resetear para la próxima vez
         
-        // Envío de datos del sensor a través de la red mesh
-        
-        mesh.write(dataBuffer, 'M', sizeof(dataBuffer));
-        
-        
-        // Muestra los datos del sensor y la fecha y hora en el monitor serial
         DateTime now = rtc.now();
         Serial.print("Nodo: ");
         Serial.print(data.nodeId);
@@ -231,29 +238,17 @@ void loop() {
         Serial.print(':');
         Serial.println(now.second());
 
-        // Reconfigurar la alarma para el siguiente intervalo de 30 segundos
         configureAlarm(1);
 
-        // Esperar un momento antes de desactivar el pin
         delay(1000);
         digitalWrite(outputPin, LOW);
 
         Serial.println("Volviendo a dormir...");
-        //LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
     }
 
-    // Asegurarse de que no haya datos pendientes de ser enviados por Serial antes de dormir
     Serial.flush();
-
-    // Mostrar mensaje antes de dormir
     Serial.println("Durmiendo... Esperando la alarma para despertar.");
     radio.powerDown();
-    // Poner al Arduino en modo de bajo consumo
     LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
-
-    // Esto se ejecutará al despertar
     Serial.println("Despierto!");
-
-    // Esperar un momento antes de volver a dormir
-    
 }
