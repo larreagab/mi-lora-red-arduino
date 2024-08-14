@@ -65,7 +65,8 @@ int repeatInterval = 1; // Intervalo de repetición en minutos
 
 void setup() {
     Serial.begin(9600);
-    Serial1.begin(9600);
+    Serial2.begin(9600);
+    delay(2000);
     mesh.setNodeID(0); // Gateway es el nodo 0
     Serial.println("Conectando a WiFi...");
     WiFi.begin(ssid, password);
@@ -149,57 +150,55 @@ void loop() {
 }
 
 void onAlarm() {
-    // Actualizar y mostrar la hora
-    //actualizarYMostrarHora();
-
     mesh.update();
     mesh.DHCP();
 
-    // Continuación de la función loop()
+    bool messageProcessed = false;
+
     while (network.available()) {
         RF24NetworkHeader header;
         network.peek(header);
 
-        if (header.type == 'M') { // 'M' representa los datos del sensor
+        if (!messageProcessed && header.type == 'M') { // 'M' representa los datos del sensor
             byte dataBuffer[sizeof(SensorData)];
             if (network.read(header, &dataBuffer, sizeof(dataBuffer))) {
                 SensorData data;
 
-                // Desempaquetar el nodeId
+                // Desempaquetar los datos del buffer
                 memcpy(&data.nodeId, dataBuffer, sizeof(data.nodeId));
-
-                // Desempaquetar la humedad
                 memcpy(&data.humidity, dataBuffer + sizeof(data.nodeId), sizeof(data.humidity));
-
-                // Desempaquetar la temperatura
                 memcpy(&data.temperature, dataBuffer + sizeof(data.nodeId) + sizeof(data.humidity), sizeof(data.temperature));
-
-                // Desempaquetar el nivel de humedad del suelo
                 memcpy(&data.moistureLevel, dataBuffer + sizeof(data.nodeId) + sizeof(data.humidity) + sizeof(data.temperature), sizeof(data.moistureLevel));
-
-                // Desempaquetar la luminosidad
                 memcpy(&data.luminosity, dataBuffer + sizeof(data.nodeId) + sizeof(data.humidity) + sizeof(data.temperature) + sizeof(data.moistureLevel), sizeof(data.luminosity));
-
-                // Desempaquetar el nivel de lluvia
                 memcpy(&data.rainLevel, dataBuffer + sizeof(data.nodeId) + sizeof(data.humidity) + sizeof(data.temperature) + sizeof(data.moistureLevel) + sizeof(data.luminosity), sizeof(data.rainLevel));
 
                 // Mostrar los datos en el monitor serial
                 printData(data);
-                 byte confirmation = 1;
-                mesh.write(&confirmation, 'C', sizeof(confirmation));
+                
+                // Enviar confirmación de recepción
+                byte confirmation = 1;
+                mesh.write(&confirmation, 'B', sizeof(confirmation));
                 Serial.println("Confirmación de recepción enviada al nodo.");
+
                 // Procesar y enviar los datos optimizados al Arduino UNO
                 SensorDataOptimized optimizedData = procesarDatos(data);
                 enviarDatosSensores(optimizedData);
                 
+                // Indicar que el mensaje ha sido procesado
+                messageProcessed = true;
             } else {
                 Serial.println("Error en la recepción de datos");
             }
+        } else {
+            // Leer y descartar cualquier mensaje adicional en el buffer
+            network.read(header, 0, 0);
+            Serial.println("Mensaje adicional descartado.");
         }
     }
-  radio.powerDown();
     
+    radio.powerDown();
 }
+
 
 void actualizarYMostrarHora() {
     // Actualizar y mostrar la hora
@@ -232,7 +231,7 @@ void actualizarYMostrarHora() {
 void enviarDatosSensores(SensorDataOptimized data) {
     // Encabezado específico para indicar el inicio de los datos
     const char encabezado[] = "DATA_START";
-    Serial1.write(encabezado, sizeof(encabezado));
+    Serial2.write(encabezado, sizeof(encabezado));
 
     // Asegurar que el Arduino Uno tenga tiempo de procesar el encabezado
     delay(50);
@@ -240,7 +239,7 @@ void enviarDatosSensores(SensorDataOptimized data) {
     // Enviar datos de los sensores a través de la interfaz serial
     byte dataBuffer[sizeof(SensorDataOptimized)];
     memcpy(dataBuffer, &data, sizeof(SensorDataOptimized));
-    Serial1.write(dataBuffer, sizeof(SensorDataOptimized));
+    Serial2.write(dataBuffer, sizeof(SensorDataOptimized));
 
     delay(1000);  // Tiempo para que el Arduino Uno procese los datos
 }

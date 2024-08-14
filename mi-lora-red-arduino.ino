@@ -35,6 +35,7 @@ void loop() {
   if (Serial.available()) {
     if (!esperandoDatos) {
       char c = Serial.read();
+      Serial.print(c);
       if (c == encabezado[encabezadoIndex]) {
         encabezadoIndex++;
         if (encabezadoIndex == encabezadoSize) {

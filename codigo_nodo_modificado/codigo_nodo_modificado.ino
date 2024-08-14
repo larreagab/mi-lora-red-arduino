@@ -93,17 +93,21 @@ void enviarDatosSensores() {
 bool recibirConfirmacion() {
     mesh.update();
     mesh.DHCP();
-    RF24NetworkHeader header;
+    RF24NetworkHeader h;
     char confirmacion;
 
     while (network.available()) {
-        network.peek(header);
-        if (header.type == 'C') {  // 'C' indica confirmación de recepción
-            network.read(header, &confirmacion, sizeof(confirmacion));
+        network.peek(h);
+        if (h.type == 'B') {  // 'C' indica confirmación de recepción
+            network.read(h, &confirmacion, sizeof(confirmacion));
             if (confirmacion == 1) {
                 return true;
             }
         }
+        else {
+    network.read(h, NULL, 0);  // Lee y descarta cualquier mensaje no relevante
+}
+        
     }
     return false;
 }
@@ -159,7 +163,7 @@ void setup() {
                     Serial.println("Hora recibida y ajustada.");
                     byte confirmation = 1;
                     mesh.write(&confirmation, 'C', sizeof(confirmation));
-                    Serial.println("Confirmación de recepción de hora enviada.");
+                    Serial.println("Confirmación de hora enviada.");
                 }
             }
         }
@@ -193,9 +197,8 @@ void loop() {
         alarmFlag = false;
         
         Serial.println("Alarma activada! Realizando tareas...");
-
-        mesh.update();
-        mesh.DHCP();
+        //Serial.println(confirmationReceived);
+        
 
         // Lectura de los sensores
         data.humidity = dht.readHumidity();
@@ -208,7 +211,7 @@ void loop() {
         while (!confirmationReceived) {
             enviarDatosSensores();  // Esperar un momento antes de reintentar
             confirmationReceived = recibirConfirmacion();
-            delay(240);
+            delay(200);
         }
         confirmationReceived = false;  // Resetear para la próxima vez
         
@@ -244,6 +247,7 @@ void loop() {
         digitalWrite(outputPin, LOW);
 
         Serial.println("Volviendo a dormir...");
+        radio.powerDown();
     }
 
     Serial.flush();
