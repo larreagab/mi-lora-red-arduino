@@ -206,7 +206,10 @@ void loop() {
         data.moistureLevel = analogRead(moisturePin);
         data.luminosity = lightMeter.readLightLevel();
         data.rainLevel = analogRead(rainSensorPin);
-
+        if(data.luminosity < 0) {
+            data.luminosity = 0;
+        }
+        
         // Enviar datos de sensores con confirmación
         while (!confirmationReceived) {
             enviarDatosSensores();  // Esperar un momento antes de reintentar

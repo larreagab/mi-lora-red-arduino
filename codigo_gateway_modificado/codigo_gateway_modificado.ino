@@ -237,14 +237,14 @@ void enviarDatosSensores(SensorDataOptimized data) {
     Serial.write(encabezado, sizeof(encabezado));
 
     // Asegurar que el Arduino Uno tenga tiempo de procesar el encabezado
-    delay(50);
+    delay(2000);
 
     // Enviar datos de los sensores a través de la interfaz serial
     byte dataBuffer[sizeof(SensorDataOptimized)];
     memcpy(dataBuffer, &data, sizeof(SensorDataOptimized));
     Serial.write(dataBuffer, sizeof(SensorDataOptimized));
 
-    delay(1000);  // Tiempo para que el Arduino Uno procese los datos
+    delay(2000);  // Tiempo para que el Arduino Uno procese los datos
 }
 
 SensorDataOptimized procesarDatos(SensorData data) {
