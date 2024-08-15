@@ -9,12 +9,16 @@
 #include <RF24Network.h>
 #include <RF24Mesh.h>
 #include <Preferences.h>
+#include <HardwareSerial.h>
 Preferences preferences;
 
+HardwareSerial MySerial(2);
 // Configuración del NRF24L01
 RF24 radio(5, 17); // CE, CSN pins
 RF24Network network(radio);
 RF24Mesh mesh(radio, network);
+const int MySerialRX = 16;
+const int MySerialTX = 17;
 
 const char* ssid = "CONEXI?N ESPACIO";
 const char* password = "J24J44S5e0OI1l";
@@ -65,7 +69,6 @@ int repeatInterval = 1; // Intervalo de repetición en minutos
 
 void setup() {
     Serial.begin(9600);
-    Serial2.begin(9600);
     delay(2000);
     mesh.setNodeID(0); // Gateway es el nodo 0
     Serial.println("Conectando a WiFi...");
@@ -179,7 +182,7 @@ void onAlarm() {
                 byte confirmation = 1;
                 mesh.write(&confirmation, 'B', sizeof(confirmation));
                 Serial.println("Confirmación de recepción enviada al nodo.");
-
+                delay(1000);
                 // Procesar y enviar los datos optimizados al Arduino UNO
                 SensorDataOptimized optimizedData = procesarDatos(data);
                 enviarDatosSensores(optimizedData);
@@ -230,8 +233,8 @@ void actualizarYMostrarHora() {
 
 void enviarDatosSensores(SensorDataOptimized data) {
     // Encabezado específico para indicar el inicio de los datos
-    const char encabezado[] = "DATA_START";
-    Serial2.write(encabezado, sizeof(encabezado));
+    const char encabezado[] = "#DATA";
+    Serial.write(encabezado, sizeof(encabezado));
 
     // Asegurar que el Arduino Uno tenga tiempo de procesar el encabezado
     delay(50);
@@ -239,7 +242,7 @@ void enviarDatosSensores(SensorDataOptimized data) {
     // Enviar datos de los sensores a través de la interfaz serial
     byte dataBuffer[sizeof(SensorDataOptimized)];
     memcpy(dataBuffer, &data, sizeof(SensorDataOptimized));
-    Serial2.write(dataBuffer, sizeof(SensorDataOptimized));
+    Serial.write(dataBuffer, sizeof(SensorDataOptimized));
 
     delay(1000);  // Tiempo para que el Arduino Uno procese los datos
 }

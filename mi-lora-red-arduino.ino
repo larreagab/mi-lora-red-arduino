@@ -16,7 +16,7 @@ struct SensorDataOptimized {
 
 // Variables de estado
 bool esperandoDatos = false;
-const char encabezado[] = "DATA_START";
+const char encabezado[] = "#DATA";
 const size_t encabezadoSize = sizeof(encabezado);
 
 const int eepromStartAddress = 0;  // Dirección de inicio en la EEPROM
@@ -35,9 +35,10 @@ void loop() {
   if (Serial.available()) {
     if (!esperandoDatos) {
       char c = Serial.read();
-      Serial.print(c);
+      
       if (c == encabezado[encabezadoIndex]) {
         encabezadoIndex++;
+        Serial.println(c);
         if (encabezadoIndex == encabezadoSize) {
           esperandoDatos = true;
           encabezadoIndex = 0;
@@ -67,7 +68,7 @@ void loop() {
       // Guardar los datos en la EEPROM
       guardarDatosEnEEPROM(data);
       // Enviar los datos a través de LoRa
-      enviarDatosLoRa(data);
+      //enviarDatosLoRa(data);
 
       Serial.flush();
 
