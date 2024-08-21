@@ -39,10 +39,10 @@ const Home = () => {
         if (portExists) {
           setSelectedPort(selectedPortFromBackendName);
           localStorage.setItem('selectedPort', selectedPortFromBackendName);
-          toast.info(`Port ${selectedPortFromBackendName} is available and selected`);
+          toast.info(`El puerto ${selectedPortFromBackendName} esta disponible y seleccionado.`);
         } else {
           localStorage.removeItem('selectedPort');
-          toast.warn('Stored port is no longer available');
+          toast.warn('El puerto guardado ya no está disponible.');
         }
       }
       
@@ -62,7 +62,7 @@ const Home = () => {
       if (data.status === 'PORT_SELECTED') {
         setSelectedPort(data.portName);
         localStorage.setItem('selectedPort', data.portName);
-        toast.success(`Port ${data.portName} selected`);
+        toast.success(`Puerto ${data.portName} seleccionado`);
       }
     };
 
@@ -146,9 +146,10 @@ const Home = () => {
   
 
   return (
-    <div>
-      <h1 className="text-3xl font-extralight underline">Instruciones de Uso</h1>
-      <p className="text-justify">
+    <div className='m-4'>
+      <h1 className="text-3xl font-bold text-[#21c0a5]">Instrucciones de Uso</h1>
+
+      <p className="text-justify text-2xl font-bold">
         Para establecer la conexión de manera exitosa, asegúrese de tener el dispositivo USB correctamente conectado a la computadora.
       </p>
 
@@ -172,7 +173,7 @@ const Home = () => {
             ))}
           </select>
           <Button
-            className="bg-blue-500 hover:bg-blue-700 text-white"
+            className="bg-[#21C0A5] hover:bg-[#21c0a5] text-white"
             onClick={refreshPorts}
           >
             Actualizar Puertos

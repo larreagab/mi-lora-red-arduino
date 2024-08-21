@@ -68,33 +68,34 @@ const ImageGrid = ({ processStarted, lastMessage }) => {
   }, [processedData]);
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        {images.map((image, index) => (
-          <div key={index} className="flex flex-col items-center">
-            <img src={image.src} alt={image.caption} className="w-full h-auto object-cover" />
-            <div className="mt-2 flex items-center justify-center">
-              <p className="text-lg italic font-bold leading-[24.2px] text-center mr-2">{image.caption}</p>
-              {loadingStates[index] ? (
-                <RotatingLines strokeColor="grey" strokeWidth="5" animationDuration="0.75" width="24" visible={true} />
-              ) : processStates[index] === 'success' ? (
-                <CheckCircleIcon className="text-green-500 w-6 h-6" />
-              ) : processStates[index] === 'error' ? (
-                <XCircleIcon className="text-red-500 w-6 h-6" />
-              ) : null}
-            </div>  
-          </div>
-        ))}
+    <div className="container max-w-full px-4 py-8">
+  <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
+    {images.map((image, index) => (
+      <div key={index} className="flex flex-col items-center">
+        <img src={image.src} alt={image.caption} className="w-36 h-auto object-cover" />
+        <div className="mt-2 flex items-center justify-center">
+          <p className="text-2xl italic font-bold leading-[24.2px] text-center mr-2">{image.caption}</p>
+          {loadingStates[index] ? (
+            <RotatingLines strokeColor="grey" strokeWidth="5" animationDuration="0.75" width="24" visible={true} />
+          ) : processStates[index] === 'success' ? (
+            <CheckCircleIcon className="text-green-500 w-6 h-6" />
+          ) : processStates[index] === 'error' ? (
+            <XCircleIcon className="text-red-500 w-6 h-6" />
+          ) : null}
+        </div>  
       </div>
+    ))}
+  </div>
 
-      {processedData && (
-        <div className="mt-8 flex justify-center">
-          <Button onClick={downloadProcessedData} className="bg-[#21C0A5]">
-            Descargar Datos Procesados
-          </Button>
-        </div>
-      )}
+  {processedData && (
+    <div className="mt-8 flex justify-center">
+      <Button onClick={downloadProcessedData} className="bg-[#21C0A5]">
+        Descargar Datos Procesados
+      </Button>
     </div>
+  )}
+</div>
+
   );
 };
 

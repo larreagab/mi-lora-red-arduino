@@ -35,7 +35,7 @@ void loop() {
   if (Serial.available()) {
     if (!esperandoDatos) {
       char c = Serial.read();
-      
+      //Serial.println(c);
       if (c == encabezado[encabezadoIndex]) {
         encabezadoIndex++;
         Serial.println(c);
@@ -49,7 +49,7 @@ void loop() {
       }
     } else if (Serial.available() >= sizeof(SensorDataOptimized)) {
       SensorDataOptimized data;
-      Serial.readBytes((int8_t*)&data, sizeof(SensorDataOptimized)); // Leer los bytes y convertirlos de vuelta a la estructura
+      Serial.readBytes((uint8_t*)&data, sizeof(SensorDataOptimized)); // Leer los bytes y convertirlos de vuelta a la estructura
 
       // Mostrar los datos en el monitor serial
       Serial.print("Node ID: ");
