@@ -69,7 +69,7 @@ void loop() {
       guardarDatosEnEEPROM(data);
       // Enviar los datos a través de LoRa
       //enviarDatosLoRa(data);
-
+      
       Serial.flush();
 
       esperandoDatos = false;  // Resetear la bandera para esperar el próximo encabezado
@@ -83,6 +83,7 @@ void loop() {
     
     if (comando == "REQUESTDATA") {
       enviarDatosGuardadosEEPROM();
+      borrarEEPROM();
     } else if (comando == "BUSCANDORED") {
       sendMessage(1, "BUSCANDO_RED_OK", 0, 0);
       delay(200);
@@ -110,7 +111,7 @@ void loop() {
 void guardarDatosEnEEPROM(SensorDataOptimized data) {
   // Calcular la dirección de fin para verificar si hay espacio suficiente
   int endAddress = currentEepromAddress + sizeof(SensorDataOptimized);
-  Serial.println(endAddress);
+  //Serial.println(endAddress);
 
   // Verificar si hay espacio suficiente en la EEPROM
   if (endAddress <= EEPROM.length()) {
