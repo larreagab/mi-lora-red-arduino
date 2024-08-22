@@ -253,7 +253,7 @@ SensorDataOptimized procesarDatos(SensorData data) {
     optimizedData.humidity = data.humidity * 100;         // Multiplicar por 100
     optimizedData.temperature = data.temperature * 100;   // Multiplicar por 100
     optimizedData.moistureLevel = data.moistureLevel;
-    optimizedData.luminosity = data.luminosity * 10;      // Multiplicar por 10
+    optimizedData.luminosity = data.luminosity
     optimizedData.rainLevel = data.rainLevel;
     return optimizedData;
 }
