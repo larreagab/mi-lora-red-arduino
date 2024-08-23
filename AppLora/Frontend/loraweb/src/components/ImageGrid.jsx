@@ -7,9 +7,9 @@ import * as XLSX from 'xlsx';
 const ImageGrid = ({ processStarted, lastMessage }) => {
   const images = [
     { src: '/buscador.png', caption: 'Buscando Red' },
-    { src: '/antena.png', caption: 'Conexion Exitosa' },
-    { src: '/tocar.png', caption: 'Comenzar Transmision' },
-    { src: '/exito.png', caption: 'Transmision Completa' },
+    { src: '/antena.png', caption: 'Conexión Exitosa' },
+    { src: '/tocar.png', caption: 'Comenzar Transmisión' },
+    { src: '/exito.png', caption: 'Transmisión Completa' },
   ];
 
   const [loadingStates, setLoadingStates] = useState([false, false, false, false]);

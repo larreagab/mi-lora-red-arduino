@@ -65,6 +65,8 @@ const long interval = 15000; // Intervalo para actualizar la hora (15 segundos =
 // Hora específica y intervalo de repetición configurables por el usuario
 int alarmHour = 3;      // Hora a la que sonará la alarma
 int alarmMinute = 8;   // Minuto a la que sonará la alarma
+
+// Intervalo de repetición en minutos
 int repeatInterval = 1; // Intervalo de repetición en minutos
 
 void setup() {
@@ -127,7 +129,7 @@ void setup() {
     rtc.disableAlarm(2);
 
     // Programar la alarma con la hora específica y el intervalo de repetición
-    configurarAlarma(1);
+    configurarAlarma(repeatInterval);
     bool horaEnviada = preferences.getBool("horaEnviada", false);
      if (!horaEnviada) {
         bool confirmationReceived = false;

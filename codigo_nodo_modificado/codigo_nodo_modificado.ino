@@ -28,6 +28,9 @@ const int alarmPin = 3;    // Pin para la alarma del RTC
 const int outputPin = 4;   // Pin para activar al despertar
 volatile bool alarmFlag = false;
 
+// Intervalo de tiempo para enviar los datos
+int intervalMinutes = 1;   // Intervalo de tiempo para enviar los datos
+
 // Estructura para enviar los datos del sensor
 struct SensorData {
     uint8_t nodeId;        // ID del nodo
@@ -183,7 +186,7 @@ void setup() {
     Serial.print(now.second(), DEC); // Segundo
     Serial.println();
 
-    configureAlarm(1);
+    configureAlarm(intervalMinutes);
 }
 
 void loop() {
@@ -244,7 +247,7 @@ void loop() {
         Serial.print(':');
         Serial.println(now.second());
 
-        configureAlarm(1);
+        configureAlarm(intervalMinutes);
 
         delay(1000);
         digitalWrite(outputPin, LOW);
