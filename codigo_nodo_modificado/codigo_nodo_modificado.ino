@@ -5,13 +5,14 @@
 #include <DHT.h> //Adafruit
 #include <RTClib.h> //Adafruit
 #include <BH1750.h>
+#include <EEPROM.h>
 #include <LowPower.h> //https://github.com/rocketscream/Low-Power
 
 // Configuración del NRF24L01
 RF24 radio(9, 10); // CE, CSN pins
 RF24Network network(radio);
 RF24Mesh mesh(radio, network);
-
+bool horaRecibida = false;
 // Configuración del sensor DHT11
 DHT dht(2, DHT11); // Pin D2 para DHT11
 
@@ -132,6 +133,8 @@ void setup() {
         while (1);
     }
     if (rtc.lostPower()) {
+        horaRecibida = false;
+        EEPROM.update(0, horaRecibida);
         Serial.println("RTC perdió energía, ajustando la hora...");
         rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
     }
@@ -150,6 +153,10 @@ void setup() {
     attachInterrupt(digitalPinToInterrupt(alarmPin), onAlarm, FALLING);
 
     // Bucle de espera hasta recibir el mensaje de la hora
+    if (EEPROM.read(0) == 0) {
+        
+    
+    
     while (!timeReceived) {
         mesh.update();
         mesh.DHCP();
@@ -164,14 +171,18 @@ void setup() {
                     rtc.adjust(DateTime(timeDataR.year, timeDataR.month, timeDataR.day, timeDataR.hour, timeDataR.minute, timeDataR.second));
                     timeReceived = true;
                     Serial.println("Hora recibida y ajustada.");
+
+                    horaRecibida = true;
+                    EEPROM.update(0, horaRecibida);
                     byte confirmation = 1;
                     mesh.write(&confirmation, 'C', sizeof(confirmation));
                     Serial.println("Confirmación de hora enviada.");
+
                 }
             }
         }
     }
-
+    }
     DateTime now = rtc.now(); // Obtener la hora actual del RTC
     Serial.print(now.year(), DEC); // Año
     Serial.print('/');

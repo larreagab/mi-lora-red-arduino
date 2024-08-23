@@ -14,6 +14,8 @@ struct SensorDataOptimized {
     int16_t rainLevel;       // 2 bytes
 };
 
+
+
 // Variables de estado
 bool esperandoDatos = false;
 const char encabezado[] = "#DATA";
@@ -198,6 +200,7 @@ void enviarDatosGuardadosEEPROM() {
     }
   }
   sendMessage(1, "DATOSENVIADOS", 0, 0);
+  currentEepromAddress = eepromStartAddress;  // Reiniciar la dirección actual
 }
 
 String readLoRaMessage() {

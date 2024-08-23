@@ -20,8 +20,11 @@ RF24Mesh mesh(radio, network);
 const int MySerialRX = 16;
 const int MySerialTX = 17;
 
-const char* ssid = "CONEXI?N ESPACIO";
-const char* password = "J24J44S5e0OI1l";
+//const char* ssid = "CONEXI?N ESPACIO";
+//const char* password = "J24J44S5e0OI1l";
+
+const char* ssid = "Galaxy A20s0686";
+const char* password = "atew8254";
 bool horaEnviada = false;
 
 WiFiUDP ntpUDP;
@@ -73,17 +76,24 @@ void setup() {
     Serial.begin(9600);
     delay(2000);
     mesh.setNodeID(0); // Gateway es el nodo 0
+    preferences.begin("my-app", false);
+    bool horaEnviada = preferences.getBool("horaEnviada", false);
+    if(!horaEnviada)
+    {
     Serial.println("Conectando a WiFi...");
     WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED) {
+    
+    while (WiFi.status() != WL_CONNECTED ) {
         delay(500);
         Serial.print(".");
     }
     Serial.println("\nWiFi conectado");
+    
 
     // Inicializa el cliente NTP y el DS3231
     Serial.println("Iniciando NTP y RTC...");
     timeClient.begin();
+    }
     if (!rtc.begin()) {
         Serial.println("No se encontró el RTC");
         while (1);
@@ -91,7 +101,7 @@ void setup() {
     Serial.println("Iniciando RF24Mesh...");
     mesh.begin();
     delay(1000);
-    preferences.begin("my-app", false);
+    
     // Verificar la causa del despertar
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
     if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
@@ -100,13 +110,17 @@ void setup() {
     } else {
         Serial.println("Inicializando el sistema");
     }
-
+    
     if (rtc.lostPower()) {
         // Ajustar la fecha y hora a la compilación
+        preferences.putBool("horaEnviada", false);
+        if(WiFi.status() == WL_CONNECTED)
+        {
         Serial.println("RTC perdió la hora, obteniendo hora de NTP");
         timeClient.update();
         rtc.adjust(DateTime(timeClient.getEpochTime()));
-        preferences.putBool("horaEnviada", false);
+        }
+        
     }
 
     
@@ -130,7 +144,7 @@ void setup() {
 
     // Programar la alarma con la hora específica y el intervalo de repetición
     configurarAlarma(repeatInterval);
-    bool horaEnviada = preferences.getBool("horaEnviada", false);
+    
      if (!horaEnviada) {
         bool confirmationReceived = false;
         while (!confirmationReceived) {
