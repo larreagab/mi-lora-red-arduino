@@ -20,11 +20,8 @@ RF24Mesh mesh(radio, network);
 const int MySerialRX = 16;
 const int MySerialTX = 17;
 
-//const char* ssid = "CONEXI?N ESPACIO";
-//const char* password = "J24J44S5e0OI1l";
-
-const char* ssid = "Galaxy A20s0686";
-const char* password = "atew8254";
+const char* ssid = "Escribir nombre de red WiFi";
+const char* password = "Contraseña de red WiFi";
 bool horaEnviada = false;
 
 WiFiUDP ntpUDP;
